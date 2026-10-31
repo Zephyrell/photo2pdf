@@ -1,0 +1,94 @@
+const assert = require("node:assert");
+const { perspective, sampleBilinear, flattenBackground, scanLUT } = require("./core.js");
+
+const R = (w, h) => [[0, 0], [w, 0], [w, h], [0, h]];
+
+// 5x5 source : rouge = 10x + y + 1
+function src5() {
+  const d = new Uint8ClampedArray(5 * 5 * 4);
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+    const i = (y * 5 + x) * 4;
+    d[i] = 10 * x + y + 1; d[i + 3] = 255;
+  }
+  return d;
+}
+const px = (d, w, x, y) => d[(y * w + x) * 4];
+
+// 1. identité : la sortie reproduit exactement la source
+{
+  const src = src5(), out = new Uint8ClampedArray(5 * 5 * 4);
+  const M = perspective(R(4, 4), R(4, 4));
+  sampleBilinear(src, 5, 5, M, out, 5, 5);
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++)
+    assert.strictEqual(px(out, 5, x, y), 10 * x + y + 1, `identité @ ${x},${y}`);
+}
+
+// 2. translation de +1 en x
+{
+  const src = src5(), out = new Uint8ClampedArray(5 * 5 * 4);
+  const M = perspective(R(5, 5), [[1, 0], [6, 0], [6, 5], [1, 5]]);
+  sampleBilinear(src, 5, 5, M, out, 5, 5);
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 4; x++)
+    assert.strictEqual(px(out, 5, x, y), 10 * (x + 1) + y + 1, `translation @ ${x},${y}`);
+}
+
+// 3. agrandissement ×2, mêmes pixels aux coordonnées paires
+{
+  const src = src5(), out = new Uint8ClampedArray(8 * 8 * 4);
+  const M = perspective(R(8, 8), R(4, 4));
+  sampleBilinear(src, 5, 5, M, out, 8, 8);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++)
+    assert.strictEqual(px(out, 8, 2 * x, 2 * y), 10 * x + y + 1, `scale @ ${x},${y}`);
+}
+
+// 4. rendu gris : 90 % papier à 200, 10 % texte à 50 -> 255 / 0
+function sheet(base, text) {
+  const d = new Uint8ClampedArray(100 * 4);
+  for (let k = 0; k < 100; k++) {
+    const v = k < 10 ? text : base;
+    d[k * 4] = d[k * 4 + 1] = d[k * 4 + 2] = v; d[k * 4 + 3] = 255;
+  }
+  return d;
+}
+{
+  const d = sheet(200, 50);
+  scanLUT(d, 100, false);
+  assert.strictEqual(d[0], 0, "texte -> 0");
+  assert.strictEqual(d[99 * 4], 255, "papier -> 255");
+  for (let k = 0; k < 100; k++)
+    assert.ok(d[k * 4] === d[k * 4 + 1] && d[k * 4 + 1] === d[k * 4 + 2], "r=g=b");
+}
+
+// 5. couleur : gain de blanc, pas de changement de teinte
+{
+  const d = sheet(200, 50);
+  d[0] = 50; d[1] = 100; d[2] = 150; // un pixel coloré à la place du "texte"
+  scanLUT(d, 100, true);
+  assert.strictEqual(d[0], 64, "50 * 255/200 -> 64");
+  assert.strictEqual(d[1], 127, "100 * 255/200 -> 127 (arrondi flottant)");
+  assert.strictEqual(d[2], 191, "150 * 255/200 -> 191");
+  assert.strictEqual(d[99 * 4], 255, "papier -> 255");
+}
+
+// 6. éclairage inégal : papier de 100 à 220, texte à 45 % -> papier blanc partout
+{
+  const w = 256, h = 256;
+  const d = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const paper = 100 + (120 * x) / (w - 1);
+    const v = Math.round(y % 4 === 0 ? paper * 0.45 : paper);
+    const i = (y * w + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  flattenBackground(d, w, h);
+  let minPaper = 255, maxText = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = d[(y * w + x) * 4];
+    if (y % 4 === 0) maxText = Math.max(maxText, v);
+    else minPaper = Math.min(minPaper, v);
+  }
+  assert.ok(minPaper >= 248, `papier uniformément blanc (min ${minPaper})`);
+  assert.ok(maxText >= 100 && maxText <= 125, `texte conservé (max ${maxText})`);
+}
+
+console.log("core : 6 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur");

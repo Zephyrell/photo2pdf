@@ -152,76 +152,49 @@ function scanLUT(d, n, color) {
 // ---------- détection du document ----------
 // img = { data, width, height } (ImageData). Renvoie les 4 coins dans l'ordre
 // haut-gauche, haut-droit, bas-droit, bas-gauche, ou null si rien de crédible.
-function findDocCorners(img) {
-  const { data: d, width: w, height: h } = img;
-  const n = w * h;
-  if (w < 16 || h < 16) return null;
+//
+// Le document est toujours au centre du cadre : on part de là, pas des bords,
+// sinon une feuille qui touche le bord de la photo est indétectable.
 
-  const lum = new Uint8Array(n);
-  for (let i = 0, p = 0; i < n; i++, p += 4)
-    lum[i] = (d[p] * 77 + d[p + 1] * 150 + d[p + 2] * 29) >> 8;
-
-  // fond : luminance médiane du pourtour, tolérance tirée de sa dispersion
-  const ring = [];
-  for (let x = 0; x < w; x++) { ring.push(lum[x], lum[(h - 1) * w + x]); }
-  for (let y = 1; y < h - 1; y++) { ring.push(lum[y * w], lum[y * w + w - 1]); }
-  ring.sort((a, b) => a - b);
-  const bg = ring[ring.length >> 1];
-  const dev = ring[(ring.length * 3) >> 2] - ring[ring.length >> 2]; // écart interquartile
-  // TOL borne l'entrée dans le fond ; GAP arrête la propagation sur un vrai bord.
-  // shortcut: un document plus clair que son fond ET sans ombre portée ne se détache pas, repli utilisateur
-  const TOL = Math.max(36, 3 * dev), GAP = 12;
-
-  // propagation depuis les bords : tout ce qui n'est pas atteint est « document »
-  const bgm = new Uint8Array(n);
-  const queue = new Int32Array(n);
+function floodRegion(lum, w, h, seeds, gap, tol, ref) {
+  // tol/ref : variante à écart borné au niveau de référence (ombre large et douce)
+  const n = w * h, mask = new Uint8Array(n), queue = new Int32Array(n);
   let qh = 0, qt = 0;
-  const seed = (i) => {
-    if (!bgm[i] && Math.abs(lum[i] - bg) <= TOL) { bgm[i] = 1; queue[qt++] = i; }
-  };
-  for (let x = 0; x < w; x++) { seed(x); seed((h - 1) * w + x); }
-  for (let y = 1; y < h - 1; y++) { seed(y * w); seed(y * w + w - 1); }
+  for (let k = 0; k < seeds.length; k++) {
+    const i = seeds[k];
+    if (!mask[i]) { mask[i] = 1; queue[qt++] = i; }
+  }
   while (qh < qt) {
     const i = queue[qh++], l = lum[i], x = i % w, y = (i / w) | 0;
-    const nx = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1,
-                y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
-    for (let k = 0; k < 4; k++) {
-      const j = nx[k];
-      if (j >= 0 && !bgm[j] && Math.abs(lum[j] - l) <= GAP) { bgm[j] = 1; queue[qt++] = j; }
-    }
+    const ok = (j) => ref === undefined ? Math.abs(lum[j] - l) <= gap : Math.abs(lum[j] - ref) <= tol;
+    if (x > 0 && !mask[i - 1] && ok(i - 1)) { mask[i - 1] = 1; queue[qt++] = i - 1; }
+    if (x < w - 1 && !mask[i + 1] && ok(i + 1)) { mask[i + 1] = 1; queue[qt++] = i + 1; }
+    if (y > 0 && !mask[i - w] && ok(i - w)) { mask[i - w] = 1; queue[qt++] = i - w; }
+    if (y < h - 1 && !mask[i + w] && ok(i + w)) { mask[i + w] = 1; queue[qt++] = i + w; }
   }
+  return { mask, count: qt };
+}
 
-  // plus grande composante du complément (8-connexions) + ses 4 points extrêmes
-  const seen = new Uint8Array(n), stack = new Int32Array(n);
-  let best = null;
-  for (let start = 0; start < n; start++) {
-    if (bgm[start] || seen[start]) continue;
-    let sp = 0, count = 0, top = null, right = null, bottom = null, left = null;
-    let smin = Infinity, smax = -Infinity, dmin = Infinity, dmax = -Infinity;
-    stack[sp++] = start; seen[start] = 1;
-    while (sp) {
-      const p = stack[--sp], x = p % w, y = (p / w) | 0;
-      count++;
-      const s = x + y, t = x - y;
-      if (s < smin) { smin = s; top = [x, y]; }
-      if (s > smax) { smax = s; bottom = [x, y]; }
-      if (t > dmax) { dmax = t; right = [x, y]; }
-      if (t < dmin) { dmin = t; left = [x, y]; }
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const xx = x + dx, yy = y + dy;
-        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-        const j = yy * w + xx;
-        if (!bgm[j] && !seen[j]) { seen[j] = 1; stack[sp++] = j; }
-      }
-    }
-    if (!best || count > best.count) best = { count, q: [top, right, bottom, left] };
+// quatre points extrêmes de la région
+function extremeCorners(mask, w, h) {
+  let smin = Infinity, smax = -Infinity, dmin = Infinity, dmax = -Infinity;
+  let tl = null, br = null, tr = null, bl = null;
+  for (let i = 0; i < w * h; i++) {
+    if (!mask[i]) continue;
+    const x = i % w, y = (i / w) | 0, s = x + y, t = x - y;
+    if (s < smin) { smin = s; tl = [x, y]; }
+    if (s > smax) { smax = s; br = [x, y]; }
+    if (t > dmax) { dmax = t; tr = [x, y]; }
+    if (t < dmin) { dmin = t; bl = [x, y]; }
   }
+  const q = [tl, tr, br, bl];
+  return new Set(q.map((p) => p && p.join(","))).size === 4 ? q : null;
+}
 
-  if (!best || best.count < n * 0.15) return null;
-  const q = best.q;
-  if (new Set(q.map((p) => p.join(","))).size !== 4) return null;
-
-  // aire (shoelace) et convexité : un quadrilatère plausible couvre une bonne part de l'image
+// convexité et taille : un quadrilatère plausible couvre une bonne part de l'image
+function validateQuad(q, count, w, h) {
+  const n = w * h;
+  if (!q || count < n * 0.12 || count > n * 0.96) return null;
   let area = 0, sign = 0;
   for (let i = 0; i < 4; i++) {
     const [x0, y0] = q[i], [x1, y1] = q[(i + 1) % 4], [x2, y2] = q[(i + 2) % 4];
@@ -233,9 +206,82 @@ function findDocCorners(img) {
       sign = sg;
     }
   }
-  if (Math.abs(area) < n * 0.2) return null;
+  if (Math.abs(area) < Math.max(n * 0.15, count * 0.7)) return null;
   return q;
 }
 
+function regionCorners(mask, count, w, h) {
+  return validateQuad(extremeCorners(mask, w, h), count, w, h);
+}
+
+function findDocCorners(img) {
+  const { data: d, width: w, height: h } = img;
+  const n = w * h;
+  if (w < 16 || h < 16) return null;
+
+  const lum = new Uint8Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4)
+    lum[i] = (d[p] * 77 + d[p + 1] * 150 + d[p + 2] * 29) >> 8;
+
+  // 1. amorce au centre : la teinte du papier y est majoritaire, même sous du texte
+  const x0 = Math.round(w * 0.4), x1 = Math.round(w * 0.6);
+  const y0 = Math.round(h * 0.4), y1 = Math.round(h * 0.6);
+  const patch = [];
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) patch.push(lum[y * w + x]);
+  const sorted = patch.slice().sort((a, b) => a - b);
+  const paper = sorted[sorted.length >> 1];
+  const seeds = [];
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++)
+    if (Math.abs(lum[y * w + x] - paper) <= 28) seeds.push(y * w + x);
+  // 1a. propagation locale : suit l'éclairage, s'arrête sur l'ombre portée
+  if (seeds.length > 8) {
+    const r = floodRegion(lum, w, h, seeds, 14);
+    const q = regionCorners(r.mask, r.count, w, h);
+    if (q) return q;
+    // 1b. ombre large et douce : la transition est progressive, on borne plutôt
+    //     l'écart au niveau du papier ; les trous laissés par le texte gênent peu
+    const r2 = floodRegion(lum, w, h, seeds, 0, 55, paper);
+    const q2 = regionCorners(r2.mask, r2.count, w, h);
+    if (q2) return q2;
+  }
+
+  // 2. repli : isoler le fond depuis le bord de la photo (document entièrement dans le cadre)
+  const ring = [];
+  for (let x = 0; x < w; x++) { ring.push(lum[x], lum[(h - 1) * w + x]); }
+  for (let y = 1; y < h - 1; y++) { ring.push(lum[y * w], lum[y * w + w - 1]); }
+  ring.sort((a, b) => a - b);
+  const bg = ring[ring.length >> 1];
+  const dev = ring[(ring.length * 3) >> 2] - ring[ring.length >> 2];
+  const TOL = Math.max(36, 3 * dev), GAP = 12;
+  const edge = [];
+  const seedIfBg = (i) => { if (Math.abs(lum[i] - bg) <= TOL) edge.push(i); };
+  for (let x = 0; x < w; x++) { seedIfBg(x); seedIfBg((h - 1) * w + x); }
+  for (let y = 1; y < h - 1; y++) { seedIfBg(y * w); seedIfBg(y * w + w - 1); }
+  const back = floodRegion(lum, w, h, edge, GAP);
+  const seen = new Uint8Array(n), stack = new Int32Array(n);
+  let best = null;
+  for (let start = 0; start < n; start++) {
+    if (back.mask[start] || seen[start]) continue;
+    let sp = 0, count = 0, smin = Infinity, smax = -Infinity, dmin = Infinity, dmax = -Infinity;
+    let tl = null, br = null, tr = null, bl = null;
+    stack[sp++] = start; seen[start] = 1;
+    while (sp) {
+      const p = stack[--sp], x = p % w, y = (p / w) | 0, sm = x + y, df = x - y;
+      count++;
+      if (sm < smin) { smin = sm; tl = [x, y]; }
+      if (sm > smax) { smax = sm; br = [x, y]; }
+      if (df > dmax) { dmax = df; tr = [x, y]; }
+      if (df < dmin) { dmin = df; bl = [x, y]; }
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx;
+        if (!back.mask[j] && !seen[j]) { seen[j] = 1; stack[sp++] = j; }
+      }
+    }
+    if (!best || count > best.count) best = { count, q: [tl, tr, br, bl] };
+  }
+  return best ? validateQuad(best.q, best.count, w, h) : null;
+}
 if (typeof module !== "undefined" && module.exports)
   module.exports = { solve, perspective, sampleBilinear, flattenBackground, scanLUT, findDocCorners };

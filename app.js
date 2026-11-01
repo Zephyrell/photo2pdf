@@ -61,8 +61,7 @@ function guessCorners(img) {
       return q.map(([x, y]) => [clamp(x * k, 0, W), clamp(y * k, 0, H)]);
     }
   } catch (_) { /* repli */ }
-  return [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]]
-    .map(([x, y]) => [x * W, y * H]);
+  return [[0, 0], [W, 0], [W, H], [0, H]];   // rien de détecté : cadre entier, pas de perte
 }
 
 // ---------- rendu scanner ----------

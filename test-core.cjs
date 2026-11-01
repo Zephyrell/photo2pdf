@@ -138,4 +138,29 @@ const near = (q, want, tol, label) => {
   assert.strictEqual(findDocCorners(synth(200, 160, 60, q, 235)), null, "tache de 2 %");
 }
 
-console.log("core : 10 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur, coins");
+// 11. document qui dépasse du cadre : les coins visibles sont sur le bord
+{
+  const q = [[60, -40], [340, -40], [340, 220], [60, 220]];
+  near(findDocCorners(synth(400, 300, 60, q, 235)), [[60, 0], [340, 0], [340, 220], [60, 220]], 3, "doc à cheval sur le bord");
+}
+// 12. ombre large et douce sous le document (transition de 8 px)
+{
+  const w = 400, h = 300, q = [[70, 40], [330, 40], [330, 260], [70, 260]];
+  const d = new Uint8ClampedArray(w * h * 4);
+  const inside = (x, y) => x >= q[0][0] && x <= q[1][0] && y >= q[0][1] && y <= q[3][1];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    let v;
+    if (inside(x, y)) v = 235;
+    else {
+      const dx = Math.max(q[0][0] - x, x - q[1][0], 0), dy = Math.max(q[0][1] - y, y - q[3][1], 0);
+      const dmin = Math.max(dx, dy);
+      v = dmin < 8 ? 235 - (dmin / 8) * 115 : 120;
+    }
+    v += noise(x, y, 3);
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  near(findDocCorners({ data: d, width: w, height: h }), q, 6, "ombre douce");
+}
+
+console.log("core : 12 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur, coins");

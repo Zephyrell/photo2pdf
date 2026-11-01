@@ -23,4 +23,6 @@ depend() {
 
 start_pre() {
 	checkpath --directory --owner photo2pdf:photo2pdf --mode 0750 "${SCAN_DIR}"
+	# start-stop-daemon ouvre ce fichier après avoir abandonné root : il doit appartenir au service
+	checkpath --file --owner photo2pdf:photo2pdf --mode 0640 "/var/log/photo2pdf.log"
 }

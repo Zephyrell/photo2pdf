@@ -30,6 +30,8 @@ body {
 main { max-width: 620px; margin: 0 auto; }
 h1 { font-size: 1.3rem; margin: 6px 0 2px; letter-spacing: -0.02em; }
 .hint { color: var(--mut); font-size: .82rem; margin: 0 0 16px; }
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.quit { border: 0; background: none; color: var(--mut); font: .8rem system-ui; padding: 8px 0; cursor: pointer; }
 
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
 .grid:empty { display: none; }
@@ -108,9 +110,12 @@ h1 { font-size: 1.3rem; margin: 6px 0 2px; letter-spacing: -0.02em; }
 </head>
 <body>
 <main>
-  <header>
-    <h1>Photo2pdf</h1>
-    <p class="hint">Facture → PDF sous 2 Mo. Tout est traité sur le téléphone.</p>
+  <header class="top">
+    <div>
+      <h1>Photo2pdf</h1>
+      <p class="hint">Facture → PDF sous 2 Mo. Tout est traité sur le téléphone.</p>
+    </div>
+    <form method="post" action="/logout"><button class="quit">Quitter</button></form>
   </header>
 
   <div id="grid" class="grid"></div>

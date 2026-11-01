@@ -9,7 +9,7 @@ Group=photo2pdf
 WorkingDirectory=/opt/photo2pdf
 Environment=SCAN_DIR=/srv/scans
 Environment=PORT=8000
-# Environment=SCAN_TOKEN=change-moi
+# Environment=AUTH_USERS=clement:pbkdf2_sha256$600000$…
 ExecStart=/usr/bin/python3 /opt/photo2pdf/server.py
 Restart=always
 RestartSec=3

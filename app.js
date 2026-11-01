@@ -26,19 +26,11 @@ const mk = (tag, text, cls) => {
   return e;
 };
 
-// en-tête de jeton, partagé par l'envoi et l'historique
-function tokenHeaders(extra) {
-  const h = extra || {};
-  const tok = localStorage.getItem("p2p-token");
-  if (tok) h["X-Scan-Token"] = tok;
-  return h;
-}
-
-// token optionnel, posé une fois via ?token=...
-const qp = new URLSearchParams(location.search);
-if (qp.get("token")) {
-  localStorage.setItem("p2p-token", qp.get("token"));
-  history.replaceState(null, "", location.pathname);
+// le cookie de session part seul (même origine) ; 401 = session expirée
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  if (r.status === 401) { location.replace("/login"); throw new Error("session expirée"); }
+  return r;
 }
 
 function loadImage(file) {
@@ -447,8 +439,8 @@ $("saveBtn").addEventListener("click", async () => {
   const btn = $("saveBtn");
   btn.disabled = true; btn.textContent = "Envoi…";
   try {
-    const headers = tokenHeaders({ "Content-Type": "application/pdf" });
-    const r = await fetch("api/upload", { method: "POST", headers, body: state.pdf.blob });
+    const r = await api("api/upload",
+      { method: "POST", headers: { "Content-Type": "application/pdf" }, body: state.pdf.blob });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
     setStatus("Enregistré : " + j.file);
@@ -506,7 +498,7 @@ function renderHist(files) {
 async function openScan(f, btn) {
   btn.disabled = true;
   try {
-    const r = await fetch("api/scans/" + encodeURIComponent(f.file), { headers: tokenHeaders() });
+    const r = await api("api/scans/" + encodeURIComponent(f.file));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const url = URL.createObjectURL(await r.blob());
     // Safari peut refuser window.open hors du geste : repli sur un lien
@@ -524,8 +516,7 @@ async function openScan(f, btn) {
 async function deleteScan(f) {
   if (!confirm("Supprimer " + f.file + " du serveur ?")) return;
   try {
-    const r = await fetch("api/scans/" + encodeURIComponent(f.file),
-      { method: "DELETE", headers: tokenHeaders() });
+    const r = await api("api/scans/" + encodeURIComponent(f.file), { method: "DELETE" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
     loadHist();
@@ -538,7 +529,7 @@ async function loadHist() {
   histEl.hidden = false;
   histEl.textContent = "Chargement…";
   try {
-    const r = await fetch("api/scans", { headers: tokenHeaders() });
+    const r = await api("api/scans");
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
     renderHist(j.files || []);

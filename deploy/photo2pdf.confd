@@ -1,4 +1,8 @@
 # /etc/conf.d/photo2pdf
 SCAN_DIR=/srv/scans
 PORT=8000
-# SCAN_TOKEN=change-moi
+# comptes autorisés : « nom:empreinte », séparés par des « ; » (ou des retours à la ligne).
+# Empreinte : sudo -u photo2pdf python3 /opt/photo2pdf/server.py hash
+# À garder entre apostrophes simples : l'empreinte contient des « $ ».
+# AUTH_USERS='clement:pbkdf2_sha256$600000$…'
+# Laisser AUTH_USERS vide rend le service ouvert à quiconque l'atteint.

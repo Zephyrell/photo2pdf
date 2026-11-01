@@ -55,9 +55,11 @@ Pour un service permanent, utilise l'unité OpenRC livrée dans `deploy/`.
 |---|---|---|
 | `PORT` | `8000` | port d'écoute |
 | `SCAN_DIR` | `./scans` | dossier où atterrissent les PDF |
-| `SCAN_TOKEN` | vide | jeton exigé pour envoyer, lire et supprimer les PDF |
+| `AUTH_USERS` | vide | comptes autorisés : `nom:empreinte`, séparés par `;` |
 
-Sans `SCAN_TOKEN`, quiconque atteint le serveur peut déposer, lire et supprimer des PDF.
+Sans `AUTH_USERS`, quiconque atteint le serveur peut déposer, lire et supprimer des PDF.
+Crée un compte avec `python3 server.py hash`, puis connecte-toi une fois : le cookie de
+session dure 30 jours.
 Détails et exemples par méthode d'installation dans le
 [guide de déploiement](docs/DEPLOIEMENT.md#4-configuration).
 

@@ -21,10 +21,15 @@ jobs:
       - run: docker build -t photo2pdf .
       - name: démarrage et vérification
         run: |
-          docker run -d --name p2p -p 8000:8000 photo2pdf
-          for i in $(seq 1 20); do curl -fs http://127.0.0.1:8000/ >/dev/null && break || sleep 1; done
+          B=http://127.0.0.1:8000
+          HASH=$(docker run --rm -i photo2pdf python3 server.py hash <<< 'mot-de-passe-de-test')
+          docker run -d --name p2p -p 8000:8000 -e AUTH_USERS="alice:$HASH" photo2pdf
+          for i in $(seq 1 20); do curl -fs $B/login >/dev/null && break || sleep 1; done
           docker logs p2p
-          curl -fs -o /dev/null http://127.0.0.1:8000/
-          curl -fsI http://127.0.0.1:8000/manifest.webmanifest | grep -i 'content-type: application/manifest+json'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/api/upload)" = "411"
+          test "$(curl -s -o /dev/null -w '%{http_code}' $B/)" = "303"
+          test "$(curl -s -o /dev/null -w '%{http_code}' $B/api/scans)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -d 'user=alice&password=faux' $B/login)" = "303"
+          curl -fs -c /tmp/jar -o /dev/null -d 'user=alice&password=mot-de-passe-de-test' $B/login
+          curl -fsI -b /tmp/jar $B/manifest.webmanifest | grep -i 'content-type: application/manifest+json'
+          test "$(curl -s -b /tmp/jar -o /dev/null -w '%{http_code}' -X POST $B/api/upload)" = "411"
           docker rm -f p2p

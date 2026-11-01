@@ -76,31 +76,46 @@ pct reboot <id>
 
 ## 4. Configuration
 
-Trois variables d'environnement, toutes optionnelles :
-
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `PORT` | `8000` | port d'écoute |
 | `SCAN_DIR` | `./scans` (Docker : `/scans`) | dossier où atterrissent les PDF |
-| `SCAN_TOKEN` | vide | jeton exigé pour envoyer, lire et supprimer |
+| `AUTH_USERS` | vide | comptes autorisés : `nom:empreinte` séparés par `;` |
+| `SESSION_SECRET` | généré | clé de signature des cookies de session |
 
-Générer un jeton :
+### Créer un compte
+
+Une ligne par personne, un mot de passe chacune ; seul son empreinte PBKDF2 est stockée.
 
 ```sh
-python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+python3 /opt/photo2pdf/server.py hash     # demande le mot de passe, affiche l'empreinte
+# pbkdf2_sha256$600000$b2c1…$9f3a…
 ```
 
-Où le poser :
+Préfixe le résultat par le nom de la personne, puis mets le tout dans `AUTH_USERS` :
 
-- **Alpine** : `/etc/conf.d/photo2pdf`
-- **systemd** : la ligne `Environment=SCAN_TOKEN=…` de `/etc/systemd/system/photo2pdf.service`
-- **Docker** : `environment:` dans `docker-compose.yml`, ou un fichier `.env` à côté
+```sh
+AUTH_USERS='clement:pbkdf2_sha256$…;marie:pbkdf2_sha256$…'
+```
 
-Puis redémarrer le service.
+Où la poser :
 
-> **Sans `SCAN_TOKEN`, quiconque atteint le serveur peut déposer, lire et supprimer des
-> PDF.** Sur un réseau privé, c'est acceptable. Dès que l'URL est joignable depuis
-> l'extérieur, mets un jeton.
+- **Alpine** : `/etc/conf.d/photo2pdf` — entre **apostrophes simples**, l'empreinte contient
+  des `$`
+- **systemd** : la ligne `Environment=AUTH_USERS=…` de `/etc/systemd/system/photo2pdf.service`
+- **Docker** : `AUTH_USERS` dans `docker-compose.yml`, ou un fichier `.env` à côté
+
+Puis redémarrer ; le journal affiche `comptes : clement`. La première visite redirige vers
+`/login` ; le cookie signé dure 30 jours et le bouton **Quitter** le supprime. Retirer une
+ligne de `AUTH_USERS` invalide immédiatement les sessions de cette personne.
+
+`SESSION_SECRET` ne sert qu'à garder les cookies valides si le dossier `SCAN_DIR` est
+recréé (Docker) : sinon une clé aléatoire est écrite dans `SCAN_DIR/.session-secret` au
+premier démarrage.
+
+> **Sans `AUTH_USERS`, le service est ouvert** : quiconque atteint l'URL peut déposer,
+> lire et supprimer les PDF. Sur un réseau privé, c'est acceptable ; dès que l'URL est
+> joignable de l'extérieur, mets des comptes.
 
 `SCAN_DIR` doit appartenir à l'utilisateur du service (`photo2pdf`), sinon l'envoi répond
 500.
@@ -110,13 +125,15 @@ Puis redémarrer le service.
 Sur la machine elle-même :
 
 ```sh
-curl -s http://127.0.0.1:8000/ | head -1
+curl -s http://127.0.0.1:8000/login | head -1
 # <!doctype html>
 
 curl -sI http://127.0.0.1:8000/manifest.webmanifest | grep -i content-type
 # content-type: application/manifest+json     ← si autre chose, l'installation iPhone échouera
 
-curl -s http://127.0.0.1:8000/api/scans -H "X-Scan-Token: <ton jeton>"
+curl -s -c /tmp/p2p -o /dev/null -d 'user=clement&password=<mot de passe>' \
+     http://127.0.0.1:8000/login
+curl -s -b /tmp/p2p http://127.0.0.1:8000/api/scans
 # {"ok": true, "files": []}
 ```
 
@@ -178,9 +195,8 @@ restreins-le à la boucle locale : `PORT=8000` + pare-feu, ou expose-le seulemen
 
 1. **Safari** (pas Chrome — seul Safari peut installer une PWA sur iOS), ouvre
    `https://scan.example.com`.
-2. Si un `SCAN_TOKEN` est défini, ouvre **une seule fois**
-   `https://scan.example.com/?token=<jeton>`. Le jeton est mémorisé sur l'appareil et
-   disparaît de l'URL.
+2. Connecte-toi une fois avec ton nom et ton mot de passe. Le cookie persiste 30 jours,
+   y compris pour l'app installée sur l'écran d'accueil.
 3. Bouton **Partager** → **Sur l'écran d'accueil** → **Ajouter**.
 4. Ouvre l'app depuis l'écran d'accueil : elle prend tout l'écran, sans barre d'adresse.
 5. Test complet : **Ajouter une photo** → recadrer les 4 coins → **Créer le PDF** →

@@ -14,7 +14,7 @@ error_log="/var/log/photo2pdf.log"
 
 export SCAN_DIR="${SCAN_DIR:-/srv/scans}"
 export PORT="${PORT:-8000}"
-export SCAN_TOKEN="${SCAN_TOKEN:-}"
+export AUTH_USERS="${AUTH_USERS:-}"
 
 depend() {
 	need net

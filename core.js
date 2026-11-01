@@ -148,5 +148,94 @@ function scanLUT(d, n, color) {
   }
 }
 
+
+// ---------- détection du document ----------
+// img = { data, width, height } (ImageData). Renvoie les 4 coins dans l'ordre
+// haut-gauche, haut-droit, bas-droit, bas-gauche, ou null si rien de crédible.
+function findDocCorners(img) {
+  const { data: d, width: w, height: h } = img;
+  const n = w * h;
+  if (w < 16 || h < 16) return null;
+
+  const lum = new Uint8Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4)
+    lum[i] = (d[p] * 77 + d[p + 1] * 150 + d[p + 2] * 29) >> 8;
+
+  // fond : luminance médiane du pourtour, tolérance tirée de sa dispersion
+  const ring = [];
+  for (let x = 0; x < w; x++) { ring.push(lum[x], lum[(h - 1) * w + x]); }
+  for (let y = 1; y < h - 1; y++) { ring.push(lum[y * w], lum[y * w + w - 1]); }
+  ring.sort((a, b) => a - b);
+  const bg = ring[ring.length >> 1];
+  const dev = ring[(ring.length * 3) >> 2] - ring[ring.length >> 2]; // écart interquartile
+  // TOL borne l'entrée dans le fond ; GAP arrête la propagation sur un vrai bord.
+  // shortcut: un document plus clair que son fond ET sans ombre portée ne se détache pas, repli utilisateur
+  const TOL = Math.max(36, 3 * dev), GAP = 12;
+
+  // propagation depuis les bords : tout ce qui n'est pas atteint est « document »
+  const bgm = new Uint8Array(n);
+  const queue = new Int32Array(n);
+  let qh = 0, qt = 0;
+  const seed = (i) => {
+    if (!bgm[i] && Math.abs(lum[i] - bg) <= TOL) { bgm[i] = 1; queue[qt++] = i; }
+  };
+  for (let x = 0; x < w; x++) { seed(x); seed((h - 1) * w + x); }
+  for (let y = 1; y < h - 1; y++) { seed(y * w); seed(y * w + w - 1); }
+  while (qh < qt) {
+    const i = queue[qh++], l = lum[i], x = i % w, y = (i / w) | 0;
+    const nx = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1,
+                y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+    for (let k = 0; k < 4; k++) {
+      const j = nx[k];
+      if (j >= 0 && !bgm[j] && Math.abs(lum[j] - l) <= GAP) { bgm[j] = 1; queue[qt++] = j; }
+    }
+  }
+
+  // plus grande composante du complément (8-connexions) + ses 4 points extrêmes
+  const seen = new Uint8Array(n), stack = new Int32Array(n);
+  let best = null;
+  for (let start = 0; start < n; start++) {
+    if (bgm[start] || seen[start]) continue;
+    let sp = 0, count = 0, top = null, right = null, bottom = null, left = null;
+    let smin = Infinity, smax = -Infinity, dmin = Infinity, dmax = -Infinity;
+    stack[sp++] = start; seen[start] = 1;
+    while (sp) {
+      const p = stack[--sp], x = p % w, y = (p / w) | 0;
+      count++;
+      const s = x + y, t = x - y;
+      if (s < smin) { smin = s; top = [x, y]; }
+      if (s > smax) { smax = s; bottom = [x, y]; }
+      if (t > dmax) { dmax = t; right = [x, y]; }
+      if (t < dmin) { dmin = t; left = [x, y]; }
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx;
+        if (!bgm[j] && !seen[j]) { seen[j] = 1; stack[sp++] = j; }
+      }
+    }
+    if (!best || count > best.count) best = { count, q: [top, right, bottom, left] };
+  }
+
+  if (!best || best.count < n * 0.15) return null;
+  const q = best.q;
+  if (new Set(q.map((p) => p.join(","))).size !== 4) return null;
+
+  // aire (shoelace) et convexité : un quadrilatère plausible couvre une bonne part de l'image
+  let area = 0, sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const [x0, y0] = q[i], [x1, y1] = q[(i + 1) % 4], [x2, y2] = q[(i + 2) % 4];
+    area += x0 * y1 - x1 * y0;
+    const cr = (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1);
+    if (Math.abs(cr) > 1e-9) {
+      const sg = cr > 0 ? 1 : -1;
+      if (sign && sg !== sign) return null;
+      sign = sg;
+    }
+  }
+  if (Math.abs(area) < n * 0.2) return null;
+  return q;
+}
+
 if (typeof module !== "undefined" && module.exports)
-  module.exports = { solve, perspective, sampleBilinear, flattenBackground, scanLUT };
+  module.exports = { solve, perspective, sampleBilinear, flattenBackground, scanLUT, findDocCorners };

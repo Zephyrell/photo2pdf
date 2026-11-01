@@ -1,5 +1,5 @@
 const assert = require("node:assert");
-const { perspective, sampleBilinear, flattenBackground, scanLUT } = require("./core.js");
+const { perspective, sampleBilinear, flattenBackground, scanLUT, findDocCorners } = require("./core.js");
 
 const R = (w, h) => [[0, 0], [w, 0], [w, h], [0, h]];
 
@@ -91,4 +91,51 @@ function sheet(base, text) {
   assert.ok(maxText >= 100 && maxText <= 125, `texte conservé (max ${maxText})`);
 }
 
-console.log("core : 6 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur");
+// ---------- détection des coins ----------
+const noise = (x, y, a) => (((x * 73856093) ^ (y * 19349663)) % (2 * a + 1)) - a;
+
+function synth(w, h, bg, quad, paper) {
+  const d = new Uint8ClampedArray(w * h * 4);
+  const inside = (x, y) => {
+    for (let i = 0; i < 4; i++) {
+      const [x0, y0] = quad[i], [x1, y1] = quad[(i + 1) % 4];
+      if ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0) < 0) return false;
+    }
+    return true;
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4, v = (inside(x, y) ? paper : bg) + noise(x, y, 4);
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  return { data: d, width: w, height: h };
+}
+const near = (q, want, tol, label) => {
+  assert.ok(q, `${label} : aucun quadrilatère`);
+  q.forEach(([x, y], i) =>
+    assert.ok(Math.abs(x - want[i][0]) <= tol && Math.abs(y - want[i][1]) <= tol,
+      `${label} : coin ${i} à ${x},${y}, attendu ${want[i][0]},${want[i][1]}`));
+};
+
+// 7. document incliné sur un fond sombre
+{
+  const q = [[50, 30], [190, 55], [165, 150], [35, 125]];
+  near(findDocCorners(synth(220, 180, 60, q, 235)), q, 3, "doc incliné");
+}
+// 8. feuille droite sur un bureau gris
+{
+  const q = [[30, 25], [190, 25], [190, 155], [30, 155]];
+  near(findDocCorners(synth(220, 180, 90, q, 225)), q, 3, "feuille droite");
+}
+// 9. document sombre sur fond clair (polarité inverse)
+{
+  const q = [[40, 30], [180, 40], [170, 150], [30, 140]];
+  near(findDocCorners(synth(220, 180, 220, q, 40)), q, 3, "doc sombre");
+}
+// 10. rien à détecter : image uniforme, et tache trop petite
+{
+  assert.strictEqual(findDocCorners(synth(200, 160, 120, [[0, 0], [0, 0], [0, 0], [0, 0]], 120)), null, "uniforme");
+  const q = [[92, 72], [108, 72], [108, 88], [92, 88]];
+  assert.strictEqual(findDocCorners(synth(200, 160, 60, q, 235)), null, "tache de 2 %");
+}
+
+console.log("core : 10 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur, coins");

@@ -46,42 +46,23 @@ function loadImage(file) {
 // ---------- estimation des coins ----------
 function guessCorners(img) {
   const W = img.naturalWidth, H = img.naturalHeight;
-  const fallback = [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]]
-    .map(([x, y]) => [x * W, y * H]);
   try {
-    const s = Math.min(1, 200 / Math.max(W, H));
+    const s = Math.min(1, 400 / Math.max(W, H));
     const w = Math.max(4, Math.round(W * s)), h = Math.max(4, Math.round(H * s));
     const c = document.createElement("canvas");
     c.width = w; c.height = h;
     const ctx = c.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(img, 0, 0, w, h);
-    const d = ctx.getImageData(0, 0, w, h).data;
-    const lum = (x, y) => { const i = (y * w + x) * 4; return (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; };
-
-    const border = [];
-    for (let x = 0; x < w; x++) { border.push(lum(x, 0), lum(x, h - 1)); }
-    for (let y = 0; y < h; y++) { border.push(lum(0, y), lum(w - 1, y)); }
-    border.sort((a, b) => a - b);
-    const bg = border[border.length >> 1];
-
-    let x0 = w, y0 = h, x1 = -1, y1 = -1, n = 0;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      if (Math.abs(lum(x, y) - bg) > 45) {
-        if (x < x0) x0 = x; if (x > x1) x1 = x;
-        if (y < y0) y0 = y; if (y > y1) y1 = y;
-        n++;
-      }
-    }
-    const area = (x1 - x0 + 1) * (y1 - y0 + 1);
-    if (n > w * h * 0.08 && area > w * h * 0.25 && x1 > x0 && y1 > y0) {
-      const k = 1 / s, pad = 3;
-      return [
-        [x0 - pad, y0 - pad], [x1 + pad, y0 - pad],
-        [x1 + pad, y1 + pad], [x0 - pad, y1 + pad],
-      ].map(([x, y]) => [clamp(x * k, 0, W), clamp(y * k, 0, H)]);
+    const im = ctx.getImageData(0, 0, w, h);
+    c.width = c.height = 0;
+    const q = findDocCorners(im);
+    if (q) {
+      const k = 1 / s;
+      return q.map(([x, y]) => [clamp(x * k, 0, W), clamp(y * k, 0, H)]);
     }
   } catch (_) { /* repli */ }
-  return fallback;
+  return [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]]
+    .map(([x, y]) => [x * W, y * H]);
 }
 
 // ---------- rendu scanner ----------

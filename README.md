@@ -3,7 +3,7 @@
 Photo de facture → PDF sous 2 Mo, depuis l'iPhone. PWA auto-hébergée, **sans compte
 développeur Apple**.
 
-- Recadrage manuel 4 coins avec redressement de perspective
+- Détection automatique des 4 coins (ajustables à la main) et redressement de perspective
 - Rendu scanner : fond blanchi localement (éclairage inégal corrigé), niveaux de gris
   (ou couleur), contraste étalé
 - PDF A4 dont la qualité et la résolution descendent par paliers jusqu'à tenir sous 2 Mo

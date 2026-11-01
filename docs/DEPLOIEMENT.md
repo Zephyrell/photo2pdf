@@ -167,6 +167,10 @@ server {
 }
 ```
 
+Avec **nginx-proxy-manager**, rien à ajouter : son `nginx.conf` pose déjà
+`client_max_body_size 2000m` globalement. La ligne n'est utile que pour un nginx monté à la
+main, dont la limite par défaut est **1 Mo** — un PDF de facture passerait, deux non.
+
 Le serveur écoute sur `0.0.0.0:8000`. Si un reverse proxy tourne sur la même machine,
 restreins-le à la boucle locale : `PORT=8000` + pare-feu, ou expose-le seulement au proxy.
 

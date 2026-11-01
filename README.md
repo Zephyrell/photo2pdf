@@ -29,75 +29,37 @@ vont dans `scans/` (surchargeable par `SCAN_DIR`).
     pdf.js                écrivain PDF minimal, zéro dépendance
     server.py             statique + API d'envoi et d'historique
     deploy/               unités systemd et OpenRC, /etc/conf.d
+    docs/DEPLOIEMENT.md   tutoriel de déploiement et de configuration
     Dockerfile            image python:3-alpine, non-root
     test-core.cjs         auto-tests des fonctions pures
     test-pdf.cjs          auto-test de la structure du PDF
 
-## Déployer sur un LXC
+## Déploiement
 
-Une seule dépendance : `python3`. Pas de build, pas de paquet Python.
+Guide pas à pas : **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)** — installation Alpine,
+Debian ou Docker, configuration, HTTPS, installation iPhone, mise à jour, sauvegarde et
+dépannage.
 
-### Alpine (OpenRC)
+Le plus court chemin sur une LXC Alpine :
 
     apk add python3 git
     git clone https://github.com/Zephyrell/photo2pdf /opt/photo2pdf
-    adduser -D -H -s /sbin/nologin photo2pdf
-    mkdir -p /srv/scans && chown photo2pdf:photo2pdf /srv/scans
-    install -m 755 /opt/photo2pdf/deploy/photo2pdf.openrc /etc/init.d/photo2pdf
-    install -m 644 /opt/photo2pdf/deploy/photo2pdf.confd /etc/conf.d/photo2pdf
-    rc-update add photo2pdf default
-    rc-service photo2pdf start
+    cd /opt/photo2pdf
+    SCAN_DIR=/srv/scans python3 server.py
 
-Les réglages (`SCAN_DIR`, `PORT`, `SCAN_TOKEN`) vont dans `/etc/conf.d/photo2pdf`.
+Pour un service permanent, utilise l'unité OpenRC livrée dans `deploy/`.
 
-### Debian / Ubuntu (systemd)
+## Configuration
 
-    apt install python3 git
-    git clone https://github.com/Zephyrell/photo2pdf /opt/photo2pdf
-    useradd -r -s /usr/sbin/nologin photo2pdf
-    mkdir -p /srv/scans && chown photo2pdf:photo2pdf /srv/scans
-    install -m 644 /opt/photo2pdf/deploy/photo2pdf.service /etc/systemd/system/
-    systemctl enable --now photo2pdf
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `PORT` | `8000` | port d'écoute |
+| `SCAN_DIR` | `./scans` | dossier où atterrissent les PDF |
+| `SCAN_TOKEN` | vide | jeton exigé pour envoyer, lire et supprimer les PDF |
 
-Mise à jour : `git -C /opt/photo2pdf pull`, puis `rc-service photo2pdf restart` (Alpine) ou
-`systemctl restart photo2pdf`.
-
-## Docker
-
-    mkdir -p scans && sudo chown -R 10001:10001 scans   # l'image tourne sans root
-    SCAN_TOKEN=change-moi docker compose up -d --build
-
-Le dossier `scans/` de l'hôte reçoit les PDF. Image basée sur `python:3-alpine`, ~60 Mo.
-Sur un LXC Proxmox, Docker a besoin de l'imbrication :
-
-    pct set <id> --features nesting=1
-
-## HTTPS
-
-Indispensable pour que le partage de fichiers et le mode plein écran fonctionnent. Au choix :
-
-- le reverse proxy existant (nginx / Caddy / Traefik) vers `127.0.0.1:8000`
-- `tailscale serve --bg 8000` → HTTPS sur le tailnet
-- Cloudflare Tunnel
-
-Exemple nginx :
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        client_max_body_size 10m;
-    }
-
-## Sur l'iPhone
-
-Safari → l'URL → Partager → « Sur l'écran d'accueil ».
-
-Si `SCAN_TOKEN` est défini côté serveur, ouvrir une fois `https://…/?token=…` : le jeton
-est mémorisé sur l'appareil.
-
-Le bouton **Historique serveur** liste les PDF déjà envoyés et permet de les rouvrir ou de
-les supprimer. Ils passent par `/api/scans` : le dossier `scans/` n'est jamais servi en
-statique. Le jeton y est donc aussi obligatoire — sans `SCAN_TOKEN`, quiconque atteint le
-serveur peut déposer, lire et supprimer des PDF.
+Sans `SCAN_TOKEN`, quiconque atteint le serveur peut déposer, lire et supprimer des PDF.
+Détails et exemples par méthode d'installation dans le
+[guide de déploiement](docs/DEPLOIEMENT.md#4-configuration).
 
 ## Tests
 

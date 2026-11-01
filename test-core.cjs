@@ -94,7 +94,7 @@ function sheet(base, text) {
 // ---------- détection des coins ----------
 const noise = (x, y, a) => (((x * 73856093) ^ (y * 19349663)) % (2 * a + 1)) - a;
 
-function synth(w, h, bg, quad, paper) {
+function synth(w, h, bg, quad, paper, paint) {
   const d = new Uint8ClampedArray(w * h * 4);
   const inside = (x, y) => {
     for (let i = 0; i < 4; i++) {
@@ -104,8 +104,10 @@ function synth(w, h, bg, quad, paper) {
     return true;
   };
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = (y * w + x) * 4, v = (inside(x, y) ? paper : bg) + noise(x, y, 4);
-    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+    const i = (y * w + x) * 4, inq = inside(x, y), v = inq ? paper : bg;
+    const [r, g, b] = paint ? paint(x, y, inq) : [v, v, v];
+    d[i] = r + noise(x, y, 4); d[i + 1] = g + noise(x, y, 4);
+    d[i + 2] = b + noise(x, y, 4); d[i + 3] = 255;
   }
   return { data: d, width: w, height: h };
 }
@@ -163,4 +165,15 @@ const near = (q, want, tol, label) => {
   near(findDocCorners({ data: d, width: w, height: h }), q, 6, "ombre douce");
 }
 
-console.log("core : 12 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur, coins");
+// 13. lumière oblique sur un bureau chaud : le bas du papier descend à la luminance
+//     du bois, seule la teinte (r-b) les sépare — sans elle, la propagation débordait
+{
+  const q = [[30, 56], [255, 48], [285, 381], [28, 394]];
+  const img = synth(300, 400, 0, q, 0, (x, y, inq) => {
+    if (!inq) return [188, 132, 78];             // bureau bois, luminance ≈ 142
+    const p = 225 - 75 * x / 300;                // papier : dégradé 225 → 150
+    return [p, p - 1, p - 8];                    // neutre, très légèrement chaud
+  });
+  near(findDocCorners(img), q, 4, "papier oblique sur bureau chaud");
+}
+console.log("core : 13 tests OK  — homographie, échantillonnage, fond local, rendu gris, rendu couleur, coins");

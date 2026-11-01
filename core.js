@@ -156,8 +156,8 @@ function scanLUT(d, n, color) {
 // Le document est toujours au centre du cadre : on part de là, pas des bords,
 // sinon une feuille qui touche le bord de la photo est indétectable.
 
-function floodRegion(lum, w, h, seeds, gap, tol, ref) {
-  // tol/ref : variante à écart borné au niveau de référence (ombre large et douce)
+function floodRegion(lum, w, h, seeds, ok) {
+  // ok(j, i) : le voisin j prolonge-t-il la région autour du pixel i ?
   const n = w * h, mask = new Uint8Array(n), queue = new Int32Array(n);
   let qh = 0, qt = 0;
   for (let k = 0; k < seeds.length; k++) {
@@ -165,8 +165,7 @@ function floodRegion(lum, w, h, seeds, gap, tol, ref) {
     if (!mask[i]) { mask[i] = 1; queue[qt++] = i; }
   }
   while (qh < qt) {
-    const i = queue[qh++], l = lum[i], x = i % w, y = (i / w) | 0;
-    const ok = (j) => ref === undefined ? Math.abs(lum[j] - l) <= gap : Math.abs(lum[j] - ref) <= tol;
+    const i = queue[qh++], x = i % w, y = (i / w) | 0;
     if (x > 0 && !mask[i - 1] && ok(i - 1)) { mask[i - 1] = 1; queue[qt++] = i - 1; }
     if (x < w - 1 && !mask[i + 1] && ok(i + 1)) { mask[i + 1] = 1; queue[qt++] = i + 1; }
     if (y > 0 && !mask[i - w] && ok(i - w)) { mask[i - w] = 1; queue[qt++] = i - w; }
@@ -219,28 +218,37 @@ function findDocCorners(img) {
   const n = w * h;
   if (w < 16 || h < 16) return null;
 
-  const lum = new Uint8Array(n);
-  for (let i = 0, p = 0; i < n; i++, p += 4)
+  const lum = new Uint8Array(n), ch = new Int16Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
     lum[i] = (d[p] * 77 + d[p + 1] * 150 + d[p + 2] * 29) >> 8;
+    ch[i] = d[p] - d[p + 2]; // chaleur : sépare un bureau coloré du papier neutre
+  }
 
   // 1. amorce au centre : la teinte du papier y est majoritaire, même sous du texte
   const x0 = Math.round(w * 0.4), x1 = Math.round(w * 0.6);
   const y0 = Math.round(h * 0.4), y1 = Math.round(h * 0.6);
-  const patch = [];
-  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) patch.push(lum[y * w + x]);
+  const patch = [], patchC = [];
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    patch.push(lum[y * w + x]); patchC.push(ch[y * w + x]);
+  }
   const sorted = patch.slice().sort((a, b) => a - b);
   const paper = sorted[sorted.length >> 1];
+  const sortedC = patchC.slice().sort((a, b) => a - b);
+  const paperC = sortedC[sortedC.length >> 1];
   const seeds = [];
   for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++)
-    if (Math.abs(lum[y * w + x] - paper) <= 28) seeds.push(y * w + x);
+    if (Math.abs(lum[y * w + x] - paper) <= 28 && Math.abs(ch[y * w + x] - paperC) <= 24)
+      seeds.push(y * w + x);
   // 1a. propagation locale : suit l'éclairage, s'arrête sur l'ombre portée
   if (seeds.length > 8) {
-    const r = floodRegion(lum, w, h, seeds, 14);
+    const r = floodRegion(lum, w, h, seeds,
+      (j, i) => Math.abs(lum[j] - lum[i]) <= 14 && Math.abs(ch[j] - ch[i]) <= 16);
     const q = regionCorners(r.mask, r.count, w, h);
     if (q) return q;
     // 1b. ombre large et douce : la transition est progressive, on borne plutôt
     //     l'écart au niveau du papier ; les trous laissés par le texte gênent peu
-    const r2 = floodRegion(lum, w, h, seeds, 0, 55, paper);
+    const r2 = floodRegion(lum, w, h, seeds,
+      (j) => Math.abs(lum[j] - paper) <= 55 && Math.abs(ch[j] - paperC) <= 22);
     const q2 = regionCorners(r2.mask, r2.count, w, h);
     if (q2) return q2;
   }
@@ -257,7 +265,7 @@ function findDocCorners(img) {
   const seedIfBg = (i) => { if (Math.abs(lum[i] - bg) <= TOL) edge.push(i); };
   for (let x = 0; x < w; x++) { seedIfBg(x); seedIfBg((h - 1) * w + x); }
   for (let y = 1; y < h - 1; y++) { seedIfBg(y * w); seedIfBg(y * w + w - 1); }
-  const back = floodRegion(lum, w, h, edge, GAP);
+  const back = floodRegion(lum, w, h, edge, (j, i) => Math.abs(lum[j] - lum[i]) <= GAP);
   const seen = new Uint8Array(n), stack = new Int32Array(n);
   let best = null;
   for (let start = 0; start < n; start++) {

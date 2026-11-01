@@ -253,7 +253,10 @@ Restauration : extraire l'archive dans `SCAN_DIR`, puis
 | Pas de « Sur l'écran d'accueil » | URL en HTTP, ou manifeste mal servi | passe en HTTPS ; `curl -I …/manifest.webmanifest` doit donner `application/manifest+json` |
 | « Partage impossible » | HTTP au lieu de HTTPS, ou Safari desktop | ouvre l'app depuis l'icône, en HTTPS |
 | « Envoi impossible : HTTP 413 » | corps trop gros pour le reverse proxy | `client_max_body_size 10m` |
-| « Envoi impossible : HTTP 403 » | jeton absent ou différent | rouvre `…?token=<jeton>` |
+| « Envoi impossible : HTTP 403 » | chemin protégé (`/scans`) | normal : passe par l'app |
+| « Envoi impossible : HTTP 401 » | cookie expiré ou compte retiré | reconnecte-toi, ou remets le compte dans `AUTH_USERS` |
+| La connexion échoue alors que l'empreinte est en place | nom ou mot de passe différent de ceux de l'empreinte | `. /etc/conf.d/photo2pdf && python3 /opt/photo2pdf/server.py verify <nom>` |
+| « trop de tentatives » (HTTP 429) | 5 échecs en moins de 5 min | attends, puis réessaie |
 | « Envoi impossible : HTTP 500 » | `SCAN_DIR` non inscriptible | `chown -R photo2pdf:photo2pdf /srv/scans` |
 | Rien ne répond | port fermé ou service arrêté | `ss -ltnp \| grep 8000`, `rc-service photo2pdf status` |
 | Le service ne démarre pas (OpenRC) | pidfile, droits ou chemin | `cat /var/log/photo2pdf.log` |

@@ -308,6 +308,18 @@ def main():
         print(hash_password(pw))
         return
 
+    if len(sys.argv) > 2 and sys.argv[1] == "verify":
+        # rejoue la connexion sans navigateur : « mauvais mot de passe » ou « mauvais compte » ?
+        users = parse_users(os.environ.get("AUTH_USERS", ""))
+        user = sys.argv[2]
+        pw = getpass.getpass("mot de passe : ") if sys.stdin.isatty() else sys.stdin.readline().rstrip("\n")
+        if user not in users:
+            sys.exit(f"compte inconnu : {user} (comptes : {', '.join(sorted(users)) or 'aucun'})")
+        if not check_password(users[user], pw):
+            sys.exit("refusé : mot de passe différent de l'empreinte")
+        print("ok : mot de passe accepté")
+        return
+
     USERS = parse_users(os.environ.get("AUTH_USERS", ""))
     SCAN_DIR.mkdir(parents=True, exist_ok=True)
     SECRET = load_secret()

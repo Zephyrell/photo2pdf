@@ -2,20 +2,27 @@
 Bienvenue sur le LXC photo2pdf.
 Mode opératoire : cat /root/MODE-OPERATOIRE.txt
 
-┌─ Comptes et mots de passe ────────────────────────────────────┐
-│ Changer ou ajouter un mot de passe :                          │
-│                                                               │
-│   cd /opt/photo2pdf && python3 server.py hash                 │
-│   → demande le mot de passe (invisible), affiche l'empreinte  │
-│     pbkdf2_sha256$600000$…$…                                  │
-│                                                               │
-│ Préfixer du nom de la personne, poser dans AUTH_USERS :       │
-│   /etc/conf.d/photo2pdf                                       │
-│   AUTH_USERS='clement:pbkdf2_sha256$…;marie:pbkdf2_sha256$…'  │
-│   (apostrophes simples : l'empreinte contient des $)          │
-│                                                               │
-│ Appliquer :  rc-service photo2pdf restart                     │
-│ Vérifier :   tail -n 3 /var/log/photo2pdf.log  → « comptes : »│
-│ Révoquer :   retirer sa ligne, redémarrer (coupe sa session)  │
-│ Sans AUTH_USERS, le service est ouvert à quiconque l'atteint. │
-└───────────────────────────────────────────────────────────────┘
+┌─ Comptes et mots de passe ─────────────────────────────────────┐
+│                                                                │
+│ Changer ou ajouter un mot de passe :                           │
+│                                                                │
+│   cd /opt/photo2pdf && python3 server.py hash                  │
+│   → demande le mot de passe (invisible), affiche l'empreinte   │
+│     pbkdf2_sha256$600000$…$…                                   │
+│                                                                │
+│ Préfixer du nom de la personne, poser dans AUTH_USERS :        │
+│   /etc/conf.d/photo2pdf                                        │
+│   AUTH_USERS='clement:pbkdf2_sha256$…;marie:pbkdf2_sha256$…'   │
+│   (apostrophes simples : l'empreinte contient des $)           │
+│                                                                │
+│ Appliquer :  rc-service photo2pdf restart                      │
+│ Vérifier :   tail -n 3 /var/log/photo2pdf.log  → « comptes : » │
+│ Révoquer :   retirer sa ligne, redémarrer (coupe sa session)   │
+│                                                                │
+│ Tester un mot de passe sans navigateur :                       │
+│   . /etc/conf.d/photo2pdf                                      │
+│   python3 /opt/photo2pdf/server.py verify <nom>                │
+│                                                                │
+│ Sans AUTH_USERS, le service est ouvert à quiconque l'atteint.  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘

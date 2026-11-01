@@ -20,7 +20,7 @@ Mode opératoire : cat /root/MODE-OPERATOIRE.txt
 │ Révoquer :   retirer sa ligne, redémarrer (coupe sa session)   │
 │                                                                │
 │ Tester un mot de passe sans navigateur :                       │
-│   . /etc/conf.d/photo2pdf                                      │
+│   . /etc/conf.d/photo2pdf && export AUTH_USERS                 │
 │   python3 /opt/photo2pdf/server.py verify <nom>                │
 │                                                                │
 │ Sans AUTH_USERS, le service est ouvert à quiconque l'atteint.  │

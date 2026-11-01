@@ -120,6 +120,15 @@ premier démarrage.
 `SCAN_DIR` doit appartenir à l'utilisateur du service (`photo2pdf`), sinon l'envoi répond
 500.
 
+### Mémo à la connexion
+
+`deploy/motd` rappelle ces commandes à chaque connexion. Pour l'installer sur le LXC :
+
+```sh
+install -m 0644 /opt/photo2pdf/deploy/motd /etc/motd
+cp /etc/motd /root/MODE-OPERATOIRE.txt     # depuis « pct enter », qui n'affiche pas le motd
+```
+
 ## 5. Vérifier que ça tourne
 
 Sur la machine elle-même :

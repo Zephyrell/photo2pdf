@@ -13,3 +13,18 @@ jobs:
       - run: node test-core.cjs
       - run: node test-pdf.cjs
       - run: python3 -m py_compile server.py
+
+  alpine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t photo2pdf .
+      - name: démarrage et vérification
+        run: |
+          docker run -d --name p2p -p 8000:8000 photo2pdf
+          for i in $(seq 1 20); do curl -fs http://127.0.0.1:8000/ >/dev/null && break || sleep 1; done
+          docker logs p2p
+          curl -fs -o /dev/null http://127.0.0.1:8000/
+          curl -fsI http://127.0.0.1:8000/manifest.webmanifest | grep -i 'content-type: application/manifest+json'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/api/upload)" = "411"
+          docker rm -f p2p

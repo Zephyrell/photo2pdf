@@ -1,0 +1,11 @@
+services:
+  photo2pdf:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SCAN_TOKEN: ${SCAN_TOKEN:-}
+    volumes:
+      # l'image tourne en uid 10001 : chown -R 10001:10001 scans
+      - ./scans:/scans
+    restart: unless-stopped

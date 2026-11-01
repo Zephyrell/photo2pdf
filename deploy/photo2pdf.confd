@@ -1,0 +1,4 @@
+# /etc/conf.d/photo2pdf
+SCAN_DIR=/srv/scans
+PORT=8000
+# SCAN_TOKEN=change-moi

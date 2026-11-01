@@ -12,8 +12,21 @@ MAX_BODY = 8 * 1024 * 1024
 NO_CACHE = (".html", ".js", ".webmanifest")
 NAME_RE = re.compile(r"scan-\d{8}-\d{6}-[0-9a-f]{4}\.pdf")
 
+# types imposés : Alpine n'installe pas /etc/mime.types, le manifeste PWA partirait en
+# application/octet-stream et Safari refuserait de l'installer
+EXT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".webmanifest": "application/manifest+json",
+    ".json": "application/json",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+}
+
 
 class Handler(SimpleHTTPRequestHandler):
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, **EXT_TYPES}
+
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ROOT), **kw)
 

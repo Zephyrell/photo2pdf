@@ -1,0 +1,26 @@
+#!/sbin/openrc-run
+
+name="photo2pdf"
+description="Photo2pdf — photo de facture en PDF sous 2 Mo"
+
+command="/usr/bin/python3"
+command_args="/opt/photo2pdf/server.py"
+directory="/opt/photo2pdf"
+command_user="photo2pdf:photo2pdf"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/photo2pdf.log"
+error_log="/var/log/photo2pdf.log"
+
+export SCAN_DIR="${SCAN_DIR:-/srv/scans}"
+export PORT="${PORT:-8000}"
+export SCAN_TOKEN="${SCAN_TOKEN:-}"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	checkpath --directory --owner photo2pdf:photo2pdf --mode 0750 "${SCAN_DIR}"
+}

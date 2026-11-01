@@ -1,0 +1,23 @@
+[Unit]
+Description=Photo2pdf
+After=network.target
+
+[Service]
+Type=simple
+User=photo2pdf
+Group=photo2pdf
+WorkingDirectory=/opt/photo2pdf
+Environment=SCAN_DIR=/srv/scans
+Environment=PORT=8000
+# Environment=SCAN_TOKEN=change-moi
+ExecStart=/usr/bin/python3 /opt/photo2pdf/server.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# doit suivre SCAN_DIR
+ReadWritePaths=/srv/scans
+
+[Install]
+WantedBy=multi-user.target

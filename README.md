@@ -28,36 +28,49 @@ vont dans `scans/` (surchargeable par `SCAN_DIR`).
     core.js               maths et traitement d'image, sans DOM (testable sous Node)
     pdf.js                écrivain PDF minimal, zéro dépendance
     server.py             statique + API d'envoi et d'historique
+    deploy/               unités systemd et OpenRC, /etc/conf.d
+    Dockerfile            image python:3-alpine, non-root
     test-core.cjs         auto-tests des fonctions pures
     test-pdf.cjs          auto-test de la structure du PDF
 
-## Déployer (Proxmox LXC)
+## Déployer sur un LXC
 
-    rsync -a --exclude scans/ ./ root@<lxc>:/opt/photo2pdf/
+Une seule dépendance : `python3`. Pas de build, pas de paquet Python.
 
-Sur la LXC :
+### Alpine (OpenRC)
 
-    cd /opt/photo2pdf
-    SCAN_DIR=/srv/scans PORT=8000 python3 server.py
+    apk add python3 git
+    git clone https://github.com/Zephyrell/photo2pdf /opt/photo2pdf
+    adduser -D -H -s /sbin/nologin photo2pdf
+    mkdir -p /srv/scans && chown photo2pdf:photo2pdf /srv/scans
+    install -m 755 /opt/photo2pdf/deploy/photo2pdf.openrc /etc/init.d/photo2pdf
+    install -m 644 /opt/photo2pdf/deploy/photo2pdf.confd /etc/conf.d/photo2pdf
+    rc-update add photo2pdf default
+    rc-service photo2pdf start
 
-`/etc/systemd/system/photo2pdf.service` :
+Les réglages (`SCAN_DIR`, `PORT`, `SCAN_TOKEN`) vont dans `/etc/conf.d/photo2pdf`.
 
-    [Unit]
-    Description=Photo2pdf
-    After=network.target
+### Debian / Ubuntu (systemd)
 
-    [Service]
-    WorkingDirectory=/opt/photo2pdf
-    Environment=SCAN_DIR=/srv/scans
-    Environment=PORT=8000
-    # Environment=SCAN_TOKEN=change-moi
-    ExecStart=/usr/bin/python3 server.py
-    Restart=always
+    apt install python3 git
+    git clone https://github.com/Zephyrell/photo2pdf /opt/photo2pdf
+    useradd -r -s /usr/sbin/nologin photo2pdf
+    mkdir -p /srv/scans && chown photo2pdf:photo2pdf /srv/scans
+    install -m 644 /opt/photo2pdf/deploy/photo2pdf.service /etc/systemd/system/
+    systemctl enable --now photo2pdf
 
-    [Install]
-    WantedBy=multi-user.target
+Mise à jour : `git -C /opt/photo2pdf pull`, puis `rc-service photo2pdf restart` (Alpine) ou
+`systemctl restart photo2pdf`.
 
-Puis `systemctl enable --now photo2pdf`.
+## Docker
+
+    mkdir -p scans && sudo chown -R 10001:10001 scans   # l'image tourne sans root
+    SCAN_TOKEN=change-moi docker compose up -d --build
+
+Le dossier `scans/` de l'hôte reçoit les PDF. Image basée sur `python:3-alpine`, ~60 Mo.
+Sur un LXC Proxmox, Docker a besoin de l'imbrication :
+
+    pct set <id> --features nesting=1
 
 ## HTTPS
 
